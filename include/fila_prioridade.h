@@ -1,0 +1,25 @@
+#ifndef FILA_PRIORIDADE_H
+#define FILA_PRIORIDADE_H
+
+#include "aeronave.h"
+
+typedef struct no_fila {
+    aeronave_t *aeronave;
+    struct no_fila *proximo;
+} no_fila_t;
+
+typedef struct {
+    no_fila_t *inicio;
+    no_fila_t *fim;
+    int tamanho;
+} fila_prioridade_t;
+
+
+void fila_inicializar(fila_prioridade_t *fila);
+void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave);
+aeronave_t *fila_remover(fila_prioridade_t *fila);
+bool fila_vazio(fila_prioridade_t *fila);
+void fila_destruir(fila_prioridade_t *fila);
+void fila_imprimir(fila_prioridade_t *fila);
+
+#endif // FILA_PRIORIDADE_H
