@@ -11,7 +11,7 @@ extern fila_prioridade_t *fila_setores;
 extern aeronave_t **aeronaves;
 extern sem_t mutex_ctrl;
 extern sem_t mutex_console;
-extern phtread_t thread_controlador;
+extern pthread_t thread_controlador;
 
 
 void atc_init(int setores, int aeronaves);
@@ -20,7 +20,7 @@ int atc_solicitar_setor(aeronave_t *aeronave, int setor_destino);
 void atc_liberar_setor(aeronave_t *aeronave, int setor_liberado);
 void *controlador_central_executar(void *arg);
 void liberar_setor_emergencia(aeronave_t *aeronave);
-void controlador_processar_solitacao();
+void controlador_processar_solicitacao();
 bool verificar_deadlock(aeronave_t *aeronave);
 void imprimir_estado_setores();
 void imprimir_fila_espera();

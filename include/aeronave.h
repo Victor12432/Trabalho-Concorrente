@@ -1,16 +1,16 @@
-#ifdef AERONAVE_H
+#ifndef AERONAVE_H
 #define AERONAVE_H
 
 #include <pthread.h>
 #include <semaphore.h>
-#include "utils.h"
+#include <time.h>
 
-typedef struct {
+typedef struct aeronave_t {
     int id;
     unsigned int prioridade;
     int *rota;
     int comprimento_rota;
-    int setor_atual;
+    int setor_atual;a
     int setor_destino;
     time_t tempo_solicitacao;
     time_t tempo_entrada;
@@ -26,6 +26,6 @@ void aeronave_destruir(aeronave_t *aeronave);
 void *aeronave_executa(void *arg);
 void aeronave_imprimir_status(aeronave_t *aeronave);
 void aeronave_registro_tempo_espera(aeronave_t *aeronave, time_t inicio);
-doble aeronave_calcular_media_espera(aeronave_t *aeronave);
+double aeronave_calcular_media_espera(aeronave_t *aeronave);
 
 #endif // AERONAVE_H
