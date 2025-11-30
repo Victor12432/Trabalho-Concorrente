@@ -1,25 +1,21 @@
-#ifndef FILA_PRIORIDADE_H
-#define FILA_PRIORIDADE_H
+#ifndef UTILS_H
+#define UTILS_H
 
-#include "aeronave.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
 
-typedef struct no_fila {
-    aeronave_t *aeronave;
-    struct no_fila *proximo;
-} no_fila_t;
+#define TEMPO_BASE 1000000
+#define PRIORIDADE_MAX 1000
 
-typedef struct {
-    no_fila_t *inicio;
-    no_fila_t *fim;
-    int tamanho;
-} fila_prioridade_t;
+// Forward declaration
+struct aeronave_t;
 
+void timestamp_print(); 
+int* gerar_rotas_aleatorias(int comprimento, int total_setores);
+double calcular_tempo_medio(struct aeronave_t **aeronaves, int total_aeronaves);
+void imprimir_timestamp();
+int gerar_comprimento_rota(int total_setores);
 
-void fila_inicializar(fila_prioridade_t *fila);
-void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave);
-aeronave_t *fila_remover(fila_prioridade_t *fila);
-bool fila_vazio(fila_prioridade_t *fila);
-void fila_destruir(fila_prioridade_t *fila);
-void fila_imprimir(fila_prioridade_t *fila);
-
-#endif // FILA_PRIORIDADE_H
+#endif // UTILS_H
