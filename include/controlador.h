@@ -3,6 +3,7 @@
 
 #include "fila_prioridade.h"
 #include "aeronave.h"
+#include <stdbool.h>
 
 extern int total_setores;
 extern int total_aeronaves;
@@ -14,7 +15,7 @@ extern sem_t mutex_console;
 extern pthread_t thread_controlador;
 
 
-void atc_init(int setores, int aeronaves);
+void atc_init(int setores, int n_aeronaves);
 void atc_finalizar();
 int atc_solicitar_setor(aeronave_t *aeronave, int setor_destino);
 void atc_liberar_setor(aeronave_t *aeronave, int setor_liberado);
