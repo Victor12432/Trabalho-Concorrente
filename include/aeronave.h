@@ -10,7 +10,7 @@ typedef struct aeronave_t {
     unsigned int prioridade;
     int *rota;
     int comprimento_rota;
-    int setor_atual;a
+    int setor_atual;
     int setor_destino;
     time_t tempo_solicitacao;
     time_t tempo_entrada;
