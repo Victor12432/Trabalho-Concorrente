@@ -136,3 +136,30 @@ void fila_imprimir(fila_prioridade_t *fila)
     }
     printf("]\n");
 }
+
+/**
+ * Espia a aeronave de maior prioridade sem remover da fila
+ * @param fila: Ponteiro para a fila
+ * @return Ponteiro para a aeronave no início, ou NULL se vazia
+ */
+aeronave_t *fila_espiar(fila_prioridade_t *fila)
+{
+    if (!fila || fila->inicio == NULL) return NULL;
+    return fila->inicio->aeronave;
+}
+
+/**
+ * Rotaciona a fila movendo o primeiro elemento para o final
+ * Útil para algoritmos de prevenção de deadlock
+ * @param fila: Ponteiro para a fila
+ */
+void fila_rotacionar(fila_prioridade_t *fila)
+{
+    if (!fila || fila->tamanho < 2) return;
+    
+    no_fila_t *primeiro = fila->inicio;
+    fila->inicio = primeiro->proximo;
+    primeiro->proximo = NULL;
+    fila->fim->proximo = primeiro;
+    fila->fim = primeiro;
+}
