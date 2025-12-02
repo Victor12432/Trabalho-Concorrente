@@ -24,20 +24,13 @@ void imprimir_timestamp() {
 }
 
 /**
- * Alias para imprimir_timestamp (mantido para compatibilidade)
- */
-void timestamp_print() {
-    imprimir_timestamp();
-}
-
-/**
  * Gera uma rota aleatória para uma aeronave
  * Otimizado para reduzir chamadas a rand() e operações de módulo
  * @param comprimento: Tamanho da rota (número de setores)
  * @param total_setores: Número total de setores disponíveis no espaço aéreo
  * @return Ponteiro para array de inteiros contendo a rota
  */
-int* gerar_rotas_aleatorias(int comprimento, int total_setores) {
+int* gerar_rota_aleatoria(int comprimento, int total_setores) {
     if (comprimento <= 0 || total_setores <= 0) {
         return NULL;
     }
