@@ -40,7 +40,7 @@ build/%.o : %.c build/%.d
 
 build/src/%.o : src/%.c build/src/%.d
 	$(CC) -Wall -Werror -std=c11 $(CFLAGS) $(DEPFLAGS) -o $@ -c $<
-	mv -f build/src/$*.Td build/src/$*.d && touch $@
+	mv -f build/$*.Td build/src/$*.d && touch $@
 
 # Link final
 build/$(OUTPUT): $(OBJS)

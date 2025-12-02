@@ -23,6 +23,11 @@ void atc_init(int setores, int n_aeronaves){
     setores_ocupados = (int*)malloc(sizeof(int) * total_setores);
     fila_setores = (fila_prioridade_t *)malloc(sizeof(fila_prioridade_t)* total_setores);
 
+    if (setores_ocupados == NULL || fila_setores == NULL) {
+        fprintf(stderr, "ERRO: Falha na alocação de memória inicial\n");
+        return;
+    }
+
     //Inicializa semaforos
     sem_init(&mutex_ctrl, 0, 1); //Binario
     sem_init(&mutex_console, 0, 1); //Binario
@@ -71,7 +76,7 @@ int atc_solicitar_setor(aeronave_t *aeronave, int setor_destino){
     if (setor_ocupado || vai_travar) {
         // --- LOG DE ESPERA ---
         sem_wait(&mutex_console);
-        timestamp_print();
+        imprimir_timestamp();
         if (setor_ocupado) {
             printf("Aeronave %d (P:%d) aguardando setor %d (OCUPADO por %d)\n", 
                    aeronave->id, aeronave->prioridade, setor_destino, setores_ocupados[setor_destino]);
@@ -99,7 +104,7 @@ int atc_solicitar_setor(aeronave_t *aeronave, int setor_destino){
         setores_ocupados[setor_destino] = aeronave->id;
         
         sem_wait(&mutex_console);
-        timestamp_print();
+        imprimir_timestamp();
         printf("Aeronave %d assumiu setor %d\n", aeronave->id, setor_destino);
         sem_post(&mutex_console);
 
@@ -107,57 +112,53 @@ int atc_solicitar_setor(aeronave_t *aeronave, int setor_destino){
         return 1;
     }
 }
-
-//Função Liberar setor
-void atc_liberar_setor(aeronave_t *aeronave, int setor_liberado){
-    sem_wait(&mutex_ctrl); //Entra na regiao critica
-    
-    if(setor_liberado < 0 || setor_liberado >= total_setores){
-        sem_post(&mutex_ctrl); //Sai da regiao critica
-        return; //Erro
+// Função interna que não pega mutex (assume que chamador já tem)
+static void atc_liberar_setor_interno(aeronave_t *aeronave, int setor_liberado) {
+    if (setor_liberado < 0 || setor_liberado >= total_setores) {
+        return;
     }
 
-    //Marcar setor livre por enquanto
+    // Marcar setor livre
     setores_ocupados[setor_liberado] = -1;
     
-    //verificar se tem alguem na fila de espera deste setor
-    //Tenta encontrar uma aeronave na fila que possa assumir o setor sem causar deadlock
+    // Tentar encontrar aeronave segura na fila
     aeronave_t *proxima_aeronave = NULL;
     int total_na_fila = fila_setores[setor_liberado].tamanho;
+    
     for (int i = 0; i < total_na_fila; i++) {
-        //Pega a de maior prioridade sem remover ainda
         aeronave_t *candidata = fila_espiar(&fila_setores[setor_liberado]);
         
-        //Verifica se é seguro para a candidata entrar
         if (!verificar_deadlock(candidata, setor_liberado)) {
-            proxima_aeronave = fila_remover(&fila_setores[setor_liberado]); // Agora sim, remove
-            break; // Encontrou uma aeronave segura
+            proxima_aeronave = fila_remover(&fila_setores[setor_liberado]);
+            break;
         } else {
-            //Se não for seguro, move para o fim da fila para testar a próxima
             fila_rotacionar(&fila_setores[setor_liberado]);
         }
     }
 
     if (proxima_aeronave != NULL) {
-        //Marca o setor para a aeronave
         setores_ocupados[setor_liberado] = proxima_aeronave->id;
-        //Acorda aeronave que estava dormindo la no solicitar_setor
         sem_post(&proxima_aeronave->sem_aeronave);
 
         sem_wait(&mutex_console);
-        timestamp_print();
-        printf("Controle: Setor %d liberado por %d e repassado para %d (da fila)\n", setor_liberado, aeronave->id, proxima_aeronave->id);
+        imprimir_timestamp();
+        printf("Controle: Setor %d liberado por %d e repassado para %d\n", 
+               setor_liberado, aeronave->id, proxima_aeronave->id);
         sem_post(&mutex_console);
-    }
-    else{
-        //se fila vazia, apenas libera o setor
-        //ninguem esperando
+    } else {
         sem_wait(&mutex_console);
-        timestamp_print();
-        printf("Aeronave %d liberou setor %d(Setor livre agora)\n", aeronave->id, setor_liberado);
+        imprimir_timestamp();
+        printf("Aeronave %d liberou setor %d (Setor livre agora)\n", 
+               aeronave->id, setor_liberado);
         sem_post(&mutex_console);
     }
-    sem_post(&mutex_ctrl); //Sai da regiao critica
+}
+
+// Função pública que pega mutex
+void atc_liberar_setor(aeronave_t *aeronave, int setor_liberado) {
+    sem_wait(&mutex_ctrl);  // Pega mutex aqui
+    atc_liberar_setor_interno(aeronave, setor_liberado);
+    sem_post(&mutex_ctrl);  // Libera mutex aqui
 }
 
 //-------Algumas funções auxiliares------
@@ -169,6 +170,22 @@ bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
     //Alocações temporárias para a simulação (Vetores de Estado)
     int *simulacao_setores = (int *)malloc(total_setores * sizeof(int));
     bool *aeronave_concluiu = (bool *)calloc(total_aeronaves, sizeof(bool));
+
+    if (simulacao_setores == NULL || aeronave_concluiu == NULL) {
+        // Liberar o que foi alocado antes de retornar
+        free(simulacao_setores);
+        free(aeronave_concluiu);
+        
+        // Log de erro
+        sem_wait(&mutex_console);
+        imprimir_timestamp();
+        printf("ERRO: Falha na alocação de memória para verificação de deadlock\n");
+        sem_post(&mutex_console);
+        
+        // Por segurança, assume deadlock para não permitir operação insegura
+        return true;
+    }
+
     int aeronaves_restantes = 0;
 
     //Copia o estado real para o estado simulado (Snapshot)
@@ -314,41 +331,38 @@ void *controlador_central_executar(void *arg){
 }
 
 //
-void controlador_processar_solicitacao(){
-    //nao usado
-}
+// void controlador_processar_solicitacao(){
+//     nao usado
+// }
 
-void liberar_setor_emergencia(aeronave_t *aeronave){
+void liberar_setor_emergencia(aeronave_t *aeronave) {
     sem_wait(&mutex_ctrl);
-
-    //descobrir em qual setor a aeronave esta travada
+    
     int setor_encontrado = -1;
-
-    for(int i = 0; i < total_setores; i++){
-        if(setores_ocupados[i] == aeronave->id){
+    for (int i = 0; i < total_setores; i++) {
+        if (setores_ocupados[i] == aeronave->id) {
             setor_encontrado = i;
             break;
         }
     }
-    sem_post(&mutex_ctrl);// Libera para poder chamar a função abaixo (que pega o mutex de novo)
-
-    if(setor_encontrado != -1){
-        //log para ação critica
+    
+    if (setor_encontrado != -1) {
         sem_wait(&mutex_console);
-        timestamp_print();
-        printf("!!! EMERGÊNCIA !!! Aeronave %d (P:%d) liberando forçosamente o setor %d\n", 
+        imprimir_timestamp();
+        printf("!!! EMERGÊNCIA !!! Aeronave %d (P:%d) liberando forçadamente setor %d\n", 
                aeronave->id, aeronave->prioridade, setor_encontrado);
         sem_post(&mutex_console);
-
-        //reutiliza o codigo padrao para acordar o proximo da fila
-        atc_liberar_setor(aeronave, setor_encontrado);
-    }
-    else{
-        //so pra debugar mesmo, tentou liberar mas nao estava em lugar nenhum
+        
+        // Chama a função interna (já estamos com mutex_ctrl)
+        atc_liberar_setor_interno(aeronave, setor_encontrado);
+    } else {
         sem_wait(&mutex_console);
-        printf("Erro: Aeronave %d tentou liberação de emergência mas não ocupa setores.\n", aeronave->id);
+        printf("Erro: Aeronave %d tentou liberação de emergência mas não ocupa setores.\n", 
+               aeronave->id);
         sem_post(&mutex_console);
     }
+    
+    sem_post(&mutex_ctrl);
 }
 
 void imprimir_fila_espera(){

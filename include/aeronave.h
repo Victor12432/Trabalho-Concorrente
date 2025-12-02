@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <time.h>
+#include "../include/utils.h"
 
 typedef struct aeronave_t {
     int id;

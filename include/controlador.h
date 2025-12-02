@@ -1,9 +1,10 @@
 #ifndef CONTROLADOR_H
 #define CONTROLADOR_H
 
-#include "fila_prioridade.h"
+#include "../include/fila_prioridade.h"
 #include "aeronave.h"
 #include <stdbool.h>
+#include "../include/utils.h"
 
 extern int total_setores;
 extern int total_aeronaves;
@@ -21,8 +22,8 @@ int atc_solicitar_setor(aeronave_t *aeronave, int setor_destino);
 void atc_liberar_setor(aeronave_t *aeronave, int setor_liberado);
 void *controlador_central_executar(void *arg);
 void liberar_setor_emergencia(aeronave_t *aeronave);
-void controlador_processar_solicitacao();
-bool verificar_deadlock(aeronave_t *aeronave);
+// void controlador_processar_solicitacao();
+bool verificar_deadlock(aeronave_t *aeronave, int setor_desejado);
 void imprimir_estado_setores();
 void imprimir_fila_espera();
 
