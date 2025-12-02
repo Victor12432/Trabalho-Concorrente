@@ -23,9 +23,8 @@ aeronave_t *aeronave_criar(int id, int total_setores) {
     a->tempo_solicitacao = 0;
     a->tempo_entrada = time(NULL);
     a->total_espera = 0;
-    
+    if (total_setores < 2) total_setores = 2;
     a->comprimento_rota = 2 + (rand() % (total_setores - 1));
-    a->comprimento_rota = (a->comprimento_rota < 2) ? 2 : a->comprimento_rota;
     
     a->rota = malloc(a->comprimento_rota * sizeof(int));
     a->tempo_espera = malloc(a->comprimento_rota * sizeof(time_t));
@@ -66,7 +65,7 @@ void aeronave_imprimir_status(aeronave_t *aeronave) {
     if (aeronave == NULL) return;
     
     sem_wait(&mutex_console);
-    timestamp_print();
+    imprimir_timestamp();
     printf("Aeronave %3d [Prio:%4u] | Setor: S%-3d | Destino: S%-3d\n",
            aeronave->id, aeronave->prioridade, 
            aeronave->setor_atual, aeronave->setor_destino);
@@ -98,7 +97,7 @@ void *aeronave_executa(void *arg) {
     if (a == NULL) pthread_exit(NULL);
     
     sem_wait(&mutex_console);
-    timestamp_print();
+    imprimir_timestamp();
     printf("Aeronave %3d [Prio:%4u] Iniciou - Rota: ", a->id, a->prioridade);
     for (int i = 0; i < a->comprimento_rota; i++) {
         printf("S%d", a->rota[i]);
@@ -116,7 +115,7 @@ void *aeronave_executa(void *arg) {
         int sucesso = atc_solicitar_setor(a, setor_destino);
         if (!sucesso) {
             sem_wait(&mutex_console);
-            timestamp_print();
+            imprimir_timestamp();
             printf("Aeronave %3d Falha ao acessar S%d\n", a->id, setor_destino);
             sem_post(&mutex_console);
             break;
@@ -129,10 +128,10 @@ void *aeronave_executa(void *arg) {
         }
         
         int tempo_voo = 1000000 + (rand() % 500000);
-        usleep(tempo_voo);
+        sleep(tempo_voo);
         
         sem_wait(&mutex_console);
-        timestamp_print();
+        imprimir_timestamp();
         printf("Aeronave %3d Concluiu S%d (%d ms)\n", a->id, setor_destino, tempo_voo / 1000);
         sem_post(&mutex_console);
         
@@ -144,7 +143,7 @@ void *aeronave_executa(void *arg) {
     }
     
     sem_wait(&mutex_console);
-    timestamp_print();
+    imprimir_timestamp();
     printf("Aeronave %3d Concluída! Tempo médio espera: %.2fs\n", a->id, aeronave_calcular_media_espera(a));
     sem_post(&mutex_console);
     
