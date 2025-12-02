@@ -9,10 +9,11 @@
 #define TEMPO_BASE 1000000
 #define PRIORIDADE_MAX 1000
 
+typedef struct aeronave_t aeronave_t;
 
-void timestamp_print(); 
-int* gerar_rotas_aleatorias(int comprimento, int total_setores);
-double calcular_tempo_medio(aeronave_t **aeronaves, int total_aeronaves);
+
+int* gerar_rota_aleatoria(int comprimento, int total_setores);
+double calcular_tempo_medio(aeronave_t **aeronaves, int total_aeronaves);  
 void imprimir_timestamp();
 int gerar_comprimento_rota(int total_setores);
 
