@@ -27,7 +27,11 @@ static int total_recuos_forcados = 0;
 static int total_boosts_aplicados = 0;
 static struct timespec tempo_inicio_simulacao;
 
-//Função inicializacao
+/**
+ * Inicializa o sistema de controle de tráfego aéreo
+ * @param setores: Número total de setores no espaço aéreo
+ * @param n_aeronaves: Número total de aeronaves que participarão da simulação
+ */
 void atc_init(int setores, int n_aeronaves){
     total_setores = setores;
     total_aeronaves = n_aeronaves;
@@ -51,7 +55,10 @@ void atc_init(int setores, int n_aeronaves){
         fila_inicializar(&fila_setores[i]);
     }
 }
-//Função finalização
+
+/**
+ * Finaliza o sistema de controle de tráfego aéreo e exibe estatísticas da execução
+ */
 void atc_finalizar(){
     simulacao_ativa = 0;
     
@@ -82,6 +89,12 @@ void atc_finalizar(){
     sem_destroy(&mutex_console);
 }
 
+/**
+ * Solicita acesso a um setor específico para uma aeronave
+ * @param aeronave: Ponteiro para a aeronave que está solicitando o setor
+ * @param setor_desejado: Índice do setor que a aeronave deseja acessar
+ * @return 1 se o setor foi obtido com sucesso, 0 se ocorreu um erro
+ */
 int atc_solicitar_setor(aeronave_t *aeronave, int setor_desejado) {
     sem_wait(&mutex_ctrl);
 
@@ -221,7 +234,12 @@ int atc_solicitar_setor(aeronave_t *aeronave, int setor_desejado) {
         return 1;
     }
 }
-// Função interna que não pega mutex (assume que chamador já tem)
+
+/**
+ * Libera internamente um setor (função auxiliar chamada por outras funções)
+ * @param aeronave: Ponteiro para a aeronave que está liberando o setor
+ * @param setor_liberado: Índice do setor que está sendo liberado
+ */
 static void atc_liberar_setor_interno(aeronave_t *aeronave, int setor_liberado) {
     if (setor_liberado < 0 || setor_liberado >= total_setores) {
         return;
@@ -251,6 +269,11 @@ static void atc_liberar_setor_interno(aeronave_t *aeronave, int setor_liberado) 
     }
 }
 
+/**
+ * Libera um setor ocupado por uma aeronave e passa o controle para a próxima aeronave na fila
+ * @param aeronave: Ponteiro para a aeronave que está liberando o setor
+ * @param setor_liberado: Índice do setor que está sendo liberado
+ */
 void atc_liberar_setor(aeronave_t *aeronave, int setor_liberado) {
     sem_wait(&mutex_ctrl);
     atc_liberar_setor_interno(aeronave, setor_liberado);
@@ -259,9 +282,12 @@ void atc_liberar_setor(aeronave_t *aeronave, int setor_liberado) {
 
 //-------Algumas funções auxiliares------
 
-//Função verificar deadlock usando algoritmo do banqueiro
-//retorna true se deadlock detectado
-//retorna false se for seguro para prosseguir
+/**
+ * Verifica se a concessão de um setor causaria deadlock usando detecção de ciclos
+ * @param solicitante: Ponteiro para a aeronave que está solicitando o setor
+ * @param setor_desejado: Índice do setor que está sendo solicitado
+ * @return true se deadlock for detectado, false se for seguro prosseguir
+ */
 bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
     // Detecta ciclos de espera usando busca em profundidade
     // Segue a cadeia: solicitante -> ocupante -> ocupante2 -> ... até encontrar ciclo ou fim
@@ -378,6 +404,9 @@ bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
     return false; // Sem deadlock detectado
 }
 
+/**
+ * Imprime o estado atual de ocupação de todos os setores do espaço aéreo
+ */
 void imprimir_estado_setores(){
     sem_wait(&mutex_console);
     printf("ESTADO DOS SETORES:\n");
@@ -392,6 +421,11 @@ void imprimir_estado_setores(){
     sem_post(&mutex_console);
 }
 
+/**
+ * Função principal do controlador central que monitora e exibe o estado do sistema
+ * @param arg: Argumento genérico (não utilizado)
+ * @return NULL ao finalizar a execução
+ */
 void *controlador_central_executar(void *arg){
     while(simulacao_ativa){
         imprimir_estado_setores();
@@ -400,6 +434,10 @@ void *controlador_central_executar(void *arg){
     return NULL;
 }
 
+/**
+ * Libera forçadamente todos os setores ocupados por uma aeronave em situação de emergência
+ * @param aeronave: Ponteiro para a aeronave em situação de emergência
+ */
 void liberar_setor_emergencia(aeronave_t *aeronave) {
     sem_wait(&mutex_ctrl);
     
@@ -429,6 +467,9 @@ void liberar_setor_emergencia(aeronave_t *aeronave) {
     sem_post(&mutex_ctrl);
 }
 
+/**
+ * Imprime as filas de espera de todos os setores que possuem aeronaves aguardando acesso
+ */
 void imprimir_fila_espera(){
     sem_wait(&mutex_ctrl);
     sem_wait(&mutex_console);

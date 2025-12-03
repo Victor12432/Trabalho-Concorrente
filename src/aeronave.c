@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <string.h>
 
+// Variáveis globais externas definidas em controlador.c
 extern int total_setores;
 extern int total_aeronaves;
 extern aeronave_t **aeronaves;
@@ -13,6 +14,12 @@ extern sem_t mutex_ctrl;
 extern sem_t mutex_console;
 
 
+/**
+ * Cria uma nova aeronave com parâmetros aleatórios
+ * @param id: Identificador único da aeronave
+ * @param total_setores: Número total de setores disponíveis no espaço aéreo
+ * @return Ponteiro para a aeronave criada ou NULL em caso de falha
+ */
 aeronave_t *aeronave_criar(int id, int total_setores) {
     aeronave_t *a = malloc(sizeof(aeronave_t));
     if (a == NULL) return NULL;
@@ -57,6 +64,10 @@ aeronave_t *aeronave_criar(int id, int total_setores) {
     return a;
 }
 
+/**
+ * Libera toda a memória alocada para uma aeronave
+ * @param aeronave: Ponteiro para a aeronave a ser destruída
+ */
 void aeronave_destruir(aeronave_t *aeronave) {
     if (aeronave == NULL) return;
     
@@ -66,6 +77,10 @@ void aeronave_destruir(aeronave_t *aeronave) {
     free(aeronave);
 }
 
+/**
+ * Imprime o status atual de uma aeronave (ID, prioridade, setor atual e destino)
+ * @param aeronave: Ponteiro para a aeronave cujo status será impresso
+ */
 void aeronave_imprimir_status(aeronave_t *aeronave) {
     if (aeronave == NULL) return;
     
@@ -77,6 +92,11 @@ void aeronave_imprimir_status(aeronave_t *aeronave) {
     sem_post(&mutex_console);
 }
 
+/**
+ * Registra o tempo de espera de uma aeronave para acesso a um setor
+ * @param aeronave: Ponteiro para a aeronave que está aguardando
+ * @param inicio: Timestamp de quando a aeronave começou a aguardar
+ */
 void aeronave_registro_tempo_espera(aeronave_t *aeronave, struct timespec inicio) {
     if (aeronave == NULL || (inicio.tv_sec == 0 && inicio.tv_nsec == 0)) return;
     
@@ -91,6 +111,11 @@ void aeronave_registro_tempo_espera(aeronave_t *aeronave, struct timespec inicio
     }
 }
 
+/**
+ * Calcula a média dos tempos de espera registrados por uma aeronave
+ * @param aeronave: Ponteiro para a aeronave cujos tempos serão calculados
+ * @return Média dos tempos de espera em segundos
+ */
 double aeronave_calcular_media_espera(aeronave_t *aeronave) {
     if (aeronave == NULL || aeronave->total_espera == 0) return 0.0;
     
@@ -108,6 +133,11 @@ double aeronave_calcular_media_espera(aeronave_t *aeronave) {
     return (contagem_valida > 0) ? (soma / contagem_valida) : 0.0;
 }
 
+/**
+ * Função principal de execução de uma aeronave (thread)
+ * @param arg: Ponteiro para a estrutura aeronave_t que será executada
+ * @return NULL ao finalizar a execução
+ */
 void *aeronave_executa(void *arg) {
     aeronave_t *a = (aeronave_t *)arg;
     if (a == NULL) pthread_exit(NULL);

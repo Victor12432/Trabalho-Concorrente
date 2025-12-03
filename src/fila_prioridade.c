@@ -4,6 +4,10 @@
 #include "../include/fila_prioridade.h"
 #include "../include/aeronave.h"
 
+/**
+ * Inicializa uma fila de prioridade com valores padrão
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+*/
 void fila_inicializar(fila_prioridade_t *fila)
 {
     if (!fila) return;
@@ -12,6 +16,11 @@ void fila_inicializar(fila_prioridade_t *fila)
     fila->tamanho = 0;
 }
 
+/**
+ * Insere uma aeronave na fila de prioridade mantendo a ordem por prioridade
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ * @param aeronave: Ponteiro para a aeronave a ser inserida
+ */
 void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave) {
     if (!fila || !aeronave) return;
 
@@ -48,6 +57,11 @@ void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave) {
     fila->tamanho++;
 }
 
+/**
+ * Remove e retorna a aeronave com maior prioridade da fila
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ * @return Ponteiro para a aeronave removida ou NULL se a fila estiver vazia
+ */
 aeronave_t *fila_remover(fila_prioridade_t *fila)
 {
     if (!fila || fila->inicio == NULL) return NULL;
@@ -65,11 +79,20 @@ aeronave_t *fila_remover(fila_prioridade_t *fila)
     return aeronave;
 }
 
+/**
+ * Verifica se a fila de prioridade está vazia
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ * @return true se a fila estiver vazia, false caso contrário
+ */
 bool fila_vazio(fila_prioridade_t *fila)
 {
     return (fila == NULL || fila->inicio == NULL);
 }
 
+/**
+ * Libera toda a memória alocada para a fila de prioridade
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ */
 void fila_destruir(fila_prioridade_t *fila)
 {
     if (!fila) return;
@@ -85,6 +108,10 @@ void fila_destruir(fila_prioridade_t *fila)
     fila->tamanho = 0;
 }
 
+/**
+ * Imprime o conteúdo da fila de prioridade no formato [A1(P:5), A2(P:3), ...]
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ */
 void fila_imprimir(fila_prioridade_t *fila)
 {
     if (!fila || fila->inicio == NULL) {
@@ -102,12 +129,21 @@ void fila_imprimir(fila_prioridade_t *fila)
     printf("]\n");
 }
 
+/**
+ * Retorna a aeronave com maior prioridade sem removê-la da fila
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ * @return Ponteiro para a aeronave no início da fila ou NULL se vazia
+ */
 aeronave_t *fila_espiar(fila_prioridade_t *fila)
 {
     if (!fila || fila->inicio == NULL) return NULL;
     return fila->inicio->aeronave;
 }
 
+/**
+ * Rotaciona a fila movendo o primeiro elemento para o final
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ */
 void fila_rotacionar(fila_prioridade_t *fila)
 {
     if (!fila || fila->tamanho < 2) return;
@@ -119,6 +155,12 @@ void fila_rotacionar(fila_prioridade_t *fila)
     fila->fim = primeiro;
 }
 
+/**
+ * Remove uma aeronave específica da fila de prioridade
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ * @param aeronave: Ponteiro para a aeronave a ser removida
+ * @return true se a aeronave foi encontrada e removida, false caso contrário
+ */
 bool fila_remover_aeronave(fila_prioridade_t *fila, aeronave_t *aeronave)
 {
     if (!fila || !aeronave || fila->inicio == NULL) return false;
