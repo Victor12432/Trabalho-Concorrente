@@ -25,7 +25,7 @@ $(shell mkdir -p build build/src >/dev/null)
 # ========== COMPILAÇÃO ==========
 
 # Default: make == make all == make atc_simulator
-all: build/$(OUTPUT)
+all: $(OUTPUT)  # ← MUDEI AQUI: Agora depende do executável na raiz
 
 # Compila para valgrind (desativa sanitizers)
 vgbuild: clean
@@ -42,15 +42,16 @@ build/src/%.o : src/%.c build/src/%.d
 	$(CC) -Wall -Werror -std=c11 $(CFLAGS) $(DEPFLAGS) -o $@ -c $<
 	mv -f build/$*.Td build/src/$*.d && touch $@
 
-# Link final
-build/$(OUTPUT): $(OBJS)
+# ========== EXECUTÁVEL FINAL ==========
+
+# Link final: cria executável NA RAIZ
+$(OUTPUT): $(OBJS)  # ← ESTA É A REGRA PRINCIPAL AGORA
 	$(CC) -Wall -Werror -std=c11 $(CFLAGS) $(LFLAGS) -o $@ $^ $(LIBS)
-	cp build/$(OUTPUT) $(OUTPUT)
 
 # ========== EXECUÇÃO ==========
 
 # Executa com parâmetros padrão
-run: build/$(OUTPUT)
+run: $(OUTPUT)  # ← Agora depende do executável na raiz
 	./$(OUTPUT) 5 8
 
 # Executa com valgrind
