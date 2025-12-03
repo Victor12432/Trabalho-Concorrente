@@ -106,12 +106,18 @@ void *aeronave_executa(void *arg) {
     printf("\n");
     sem_post(&mutex_console);
     
-    for (int pos = 0; pos < a->comprimento_rota - 1; pos++) {
-        int setor_origem = a->rota[pos];
-        int setor_destino = a->rota[pos + 1];
+    // Percorre toda a rota
+    for (int pos = 0; pos < a->comprimento_rota; pos++) {
+        int setor_destino = a->rota[pos];
+        
+        // Pula se já está neste setor (setores duplicados consecutivos)
+        if (setor_destino == a->setor_atual) {
+            continue;
+        }
         
         time_t inicio_espera = time(NULL);
         
+        // Solicita acesso ao próximo setor
         int sucesso = atc_solicitar_setor(a, setor_destino);
         if (!sucesso) {
             sem_wait(&mutex_console);
@@ -123,23 +129,33 @@ void *aeronave_executa(void *arg) {
         
         aeronave_registro_tempo_espera(a, inicio_espera);
         
-        if (pos > 0) {
-            atc_liberar_setor(a, setor_origem);
+        // Libera setor anterior (se houver)
+        if (a->setor_atual >= 0) {
+            atc_liberar_setor(a, a->setor_atual);
         }
         
-        int tempo_voo = 1000000 + (rand() % 500000);
-        sleep(tempo_voo);
+        // Atualiza posição atual
+        a->setor_atual = setor_destino;
+        
+        // Simula tempo de voo no setor (1-1.5 segundos)
+        int tempo_voo_ms = 1000 + (rand() % 500);
+        struct timespec ts = {
+            .tv_sec = tempo_voo_ms / 1000,
+            .tv_nsec = (tempo_voo_ms % 1000) * 1000000
+        };
         
         sem_wait(&mutex_console);
         imprimir_timestamp();
-        printf("Aeronave %3d Concluiu S%d (%d ms)\n", a->id, setor_destino, tempo_voo / 1000);
+        printf("Aeronave %3d Voando em S%d por %d ms\n", a->id, setor_destino, tempo_voo_ms);
         sem_post(&mutex_console);
         
-        a->setor_atual = setor_destino;
+        nanosleep(&ts, NULL);
     }
     
+    // Libera último setor ao concluir
     if (a->setor_atual >= 0) {
         atc_liberar_setor(a, a->setor_atual);
+        a->setor_atual = -1;
     }
     
     sem_wait(&mutex_console);

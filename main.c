@@ -7,10 +7,7 @@
 #include "include/aeronave.h"
 #include "include/utils.h"
 
-/* ---------- Variáveis Globais ---------- */
 extern aeronave_t **Aeronaves;
-
-/* ---------- Manipulador de sinais ---------- */
 void trata_sinal(int sinal) {
     printf("\n\n[SISTEMA] Recebido sinal %d - Finalizando graciosamente...\n", sinal);
     
@@ -38,9 +35,7 @@ void trata_sinal(int sinal) {
     exit(0);
 }
 
-/* ---------- Função Principal ---------- */
 int main(int argc, char *argv[]) {
-    // Configurar tratamento de sinais
     signal(SIGINT, trata_sinal);
     signal(SIGTERM, trata_sinal);
     
@@ -53,8 +48,6 @@ int main(int argc, char *argv[]) {
     
     int num_setores = atoi(argv[1]);
     int num_aeronaves = atoi(argv[2]);
-    
-    // Validação de parâmetros
     if (num_setores <= 0 || num_aeronaves <= 0) {
         printf("Erro: Os números devem ser positivos!\n");
         return 1;
@@ -65,7 +58,6 @@ int main(int argc, char *argv[]) {
         num_setores = 2;
     }
     
-    // Seed para números aleatórios
     srand(time(NULL));
     
     printf("\n");
@@ -77,11 +69,8 @@ int main(int argc, char *argv[]) {
     printf("Pressione Ctrl+C para encerrar\n");
     printf("===============================================\n\n");
     
-    // Inicializar sistema ATC
     printf("[MAIN] Inicializando sistema ATC...\n");
     atc_init(num_setores, num_aeronaves);
-    
-    // Alocar array de aeronaves
     aeronaves = malloc(num_aeronaves * sizeof(aeronave_t*));
     if (aeronaves == NULL) {
         perror("Erro ao alocar array de aeronaves");
@@ -89,12 +78,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    // Inicializar array com NULLs
     for (int i = 0; i < num_aeronaves; i++) {
         aeronaves[i] = NULL;
     }
-    
-    // Criar aeronaves
     printf("[MAIN] Criando %d aeronaves...\n", num_aeronaves);
     for (int i = 0; i < num_aeronaves; i++) {
         aeronaves[i] = aeronave_criar(i, num_setores);
@@ -105,7 +91,6 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    // Iniciar threads das aeronaves
     printf("[MAIN] Iniciando voos...\n");
     for (int i = 0; i < num_aeronaves; i++) {
         if (pthread_create(&aeronaves[i]->thread, NULL, aeronave_executa, aeronaves[i]) != 0) {
@@ -113,13 +98,11 @@ int main(int argc, char *argv[]) {
             aeronave_destruir(aeronaves[i]);
             aeronaves[i] = NULL;
         }
-        // Pequena pausa entre criação de threads
     }
     
     printf("\n[MAIN] Todas as aeronaves iniciadas. Sistema operacional.\n");
     printf("[MAIN] Aguardando conclusão das rotas...\n\n");
     
-    // AGUARDAR TÉRMINO SIMPLES - apenas pthread_join em todas
     for (int i = 0; i < num_aeronaves; i++) {
         if (aeronaves[i] != NULL) {
             pthread_join(aeronaves[i]->thread, NULL);
@@ -129,7 +112,6 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    // Gerar relatório final
     printf("\n===============================================\n");
     printf("            RELATÓRIO FINAL\n");
     printf("===============================================\n");
@@ -140,10 +122,8 @@ int main(int argc, char *argv[]) {
     printf("Sistema finalizado com sucesso.\n");
     printf("===============================================\n");
     
-    // Finalizar sistema
     atc_finalizar();
     
-    // Liberar array de aeronaves (já liberadas individualmente)
     free(aeronaves);
     
     return 0;

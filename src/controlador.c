@@ -1,9 +1,12 @@
-//arquivo controlador
 #include "../include/controlador.h"
+#include "../include/fila_prioridade.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-//variaveis extern implementadas no .h
+#include <errno.h>
+#include <time.h>
+
+bool fila_remover_aeronave(fila_prioridade_t *fila, aeronave_t *aeronave);
 int total_setores;
 int total_aeronaves;
 int *setores_ocupados; //Array que guarda o ID da aeronave no setor(ou -1 se livre)
@@ -28,11 +31,8 @@ void atc_init(int setores, int n_aeronaves){
         return;
     }
 
-    //Inicializa semaforos
-    sem_init(&mutex_ctrl, 0, 1); //Binario
-    sem_init(&mutex_console, 0, 1); //Binario
-
-    //Inicializa setores como livres(-1) e cria filas
+    sem_init(&mutex_ctrl, 0, 1);
+    sem_init(&mutex_console, 0, 1);
     for(int i = 0; i < total_setores; i++){
         setores_ocupados[i] = -1;
         fila_inicializar(&fila_setores[i]);
@@ -40,60 +40,75 @@ void atc_init(int setores, int n_aeronaves){
 }
 //Função finalização
 void atc_finalizar(){
-    simulacao_ativa = 0; //Sinaliza para parar o loop do controlador
+    simulacao_ativa = 0;
 
-    //Libera filas
     for(int i = 0; i < total_setores; i++){
         fila_destruir(&fila_setores[i]);
     }
-    //Liberar memoria alocada
+    
     free(setores_ocupados);
     free(fila_setores);
 
-    //Destruir semaforos
     sem_destroy(&mutex_ctrl);
     sem_destroy(&mutex_console);
-
 }
 
-//Função solicitar setor
 int atc_solicitar_setor(aeronave_t *aeronave, int setor_destino){
-    sem_wait(&mutex_ctrl); //Entra na regiao critica
+    sem_wait(&mutex_ctrl);
 
-    //Verifica se o setor e valido
-    if(setor_destino < 0 || setor_destino >= total_setores){//se aeronave completou sua rota ou maior igual que o total
-        sem_post(&mutex_ctrl); //Sai da regiao critica
-        return 0; //Erro
+    if(setor_destino < 0 || setor_destino >= total_setores){
+        sem_post(&mutex_ctrl);
+        return 0;
+    }
+    if (aeronave->setor_atual == setor_destino) {
+        sem_post(&mutex_ctrl);
+        return 1;
     }
 
-    //A aeronave espera se:
-    //O setor já tem alguém (setores_ocupados[...] != -1)
-    //   OU (||)
-    //O setor está livre, MAS entrar nele cria um Deadlock (verificar_deadlock returns true)
-    bool setor_ocupado = (setores_ocupados[setor_destino] != -1);
-    bool vai_travar = verificar_deadlock(aeronave, setor_destino);
+    //A aeronave espera se o setor já tem alguém (e não é ela mesma)
+    bool setor_ocupado = (setores_ocupados[setor_destino] != -1 && 
+                          setores_ocupados[setor_destino] != aeronave->id);
 
-    if (setor_ocupado || vai_travar) {
-        // --- LOG DE ESPERA ---
+    if (setor_ocupado) {
         sem_wait(&mutex_console);
         imprimir_timestamp();
-        if (setor_ocupado) {
-            printf("Aeronave %d (P:%d) aguardando setor %d (OCUPADO por %d)\n", 
-                   aeronave->id, aeronave->prioridade, setor_destino, setores_ocupados[setor_destino]);
-        } else {
-            printf("Aeronave %d (P:%d) aguardando setor %d (BLOQUEIO PREVENTIVO DE DEADLOCK)\n", 
-                   aeronave->id, aeronave->prioridade, setor_destino);
-        }
+        printf("Aeronave %d (P:%d) aguardando setor %d (OCUPADO por %d)\n", 
+               aeronave->id, aeronave->prioridade, setor_destino, setores_ocupados[setor_destino]);
         sem_post(&mutex_console);
 
-        //Insere na fila de prioridade
         fila_inserir(&fila_setores[setor_destino], aeronave);
-        aeronave_registro_tempo_espera(aeronave, time(NULL));
+        time_t inicio = time(NULL);
+        aeronave_registro_tempo_espera(aeronave, inicio);
 
-        sem_post(&mutex_ctrl); //Sai da região crítica antes de dormir
+        sem_post(&mutex_ctrl);
         
-        //AERONAVE DORME AQUI
-        sem_wait(&aeronave->sem_aeronave); 
+        struct timespec timeout;
+        clock_gettime(CLOCK_REALTIME, &timeout);
+        timeout.tv_sec += 3;
+        
+        int wait_result = sem_timedwait(&aeronave->sem_aeronave, &timeout);
+        
+        if (wait_result == -1 && errno == ETIMEDOUT) {
+            sem_wait(&mutex_console);
+            imprimir_timestamp();
+            printf("*** TIMEOUT! Aeronave %d (P:%d) recuando de S%d para evitar deadlock ***\n", 
+                   aeronave->id, aeronave->prioridade, setor_destino);
+            sem_post(&mutex_console);
+            
+            sem_wait(&mutex_ctrl);
+            fila_remover_aeronave(&fila_setores[setor_destino], aeronave);
+            sem_post(&mutex_ctrl);
+            
+            if (aeronave->setor_atual >= 0) {
+                int setor_antigo = aeronave->setor_atual;
+                aeronave->setor_atual = -1;
+                atc_liberar_setor(aeronave, setor_antigo);
+            }
+            
+            struct timespec pausa = {.tv_sec = 0, .tv_nsec = 500000000};
+            nanosleep(&pausa, NULL);
+            return atc_solicitar_setor(aeronave, setor_destino);
+        }
         
         //Quando acordar, ela já assumiu o setor (foi processada no liberar_setor)
         return 1; 
@@ -121,20 +136,8 @@ static void atc_liberar_setor_interno(aeronave_t *aeronave, int setor_liberado) 
     // Marcar setor livre
     setores_ocupados[setor_liberado] = -1;
     
-    // Tentar encontrar aeronave segura na fila
-    aeronave_t *proxima_aeronave = NULL;
-    int total_na_fila = fila_setores[setor_liberado].tamanho;
-    
-    for (int i = 0; i < total_na_fila; i++) {
-        aeronave_t *candidata = fila_espiar(&fila_setores[setor_liberado]);
-        
-        if (!verificar_deadlock(candidata, setor_liberado)) {
-            proxima_aeronave = fila_remover(&fila_setores[setor_liberado]);
-            break;
-        } else {
-            fila_rotacionar(&fila_setores[setor_liberado]);
-        }
-    }
+    // Remove a próxima aeronave da fila (maior prioridade)
+    aeronave_t *proxima_aeronave = fila_remover(&fila_setores[setor_liberado]);
 
     if (proxima_aeronave != NULL) {
         setores_ocupados[setor_liberado] = proxima_aeronave->id;
@@ -154,11 +157,10 @@ static void atc_liberar_setor_interno(aeronave_t *aeronave, int setor_liberado) 
     }
 }
 
-// Função pública que pega mutex
 void atc_liberar_setor(aeronave_t *aeronave, int setor_liberado) {
-    sem_wait(&mutex_ctrl);  // Pega mutex aqui
+    sem_wait(&mutex_ctrl);
     atc_liberar_setor_interno(aeronave, setor_liberado);
-    sem_post(&mutex_ctrl);  // Libera mutex aqui
+    sem_post(&mutex_ctrl);
 }
 
 //-------Algumas funções auxiliares------
@@ -167,28 +169,22 @@ void atc_liberar_setor(aeronave_t *aeronave, int setor_liberado) {
 //retorna true se deadlock detectado
 //retorna false se for seguro para prosseguir
 bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
-    //Alocações temporárias para a simulação (Vetores de Estado)
     int *simulacao_setores = (int *)malloc(total_setores * sizeof(int));
     bool *aeronave_concluiu = (bool *)calloc(total_aeronaves, sizeof(bool));
 
     if (simulacao_setores == NULL || aeronave_concluiu == NULL) {
-        // Liberar o que foi alocado antes de retornar
         free(simulacao_setores);
         free(aeronave_concluiu);
         
-        // Log de erro
         sem_wait(&mutex_console);
         imprimir_timestamp();
         printf("ERRO: Falha na alocação de memória para verificação de deadlock\n");
         sem_post(&mutex_console);
         
-        // Por segurança, assume deadlock para não permitir operação insegura
         return true;
     }
 
     int aeronaves_restantes = 0;
-
-    //Copia o estado real para o estado simulado (Snapshot)
     for (int i = 0; i < total_setores; i++) {
         simulacao_setores[i] = setores_ocupados[i];
     }
@@ -210,20 +206,13 @@ bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
         }
 
         if (!esta_voando) {
-            aeronave_concluiu[i] = true; //Ignora na simulação
+            aeronave_concluiu[i] = true;
         } else {
             aeronaves_restantes++;
         }
     }
 
-    //APLICANDO O CENÁRIO (O "E se?"):
-    //Simula a aeronave entrando no setor desejado
     simulacao_setores[setor_desejado] = solicitante->id;
-    //Não liberamos o setor atual dela ainda, pois no momento da transição
-    //ela tecnicamente ocupa (ou bloqueia) ambos até a transição completar.
-    //Se sua lógica libera o anterior antes, mude aqui. Mas o mais seguro é reter ambos.
-
-    //Executa o Algoritmo de Segurança (Safety Algorithm)
     bool progresso = true;
     while (progresso && aeronaves_restantes > 0) {
         progresso = false;
@@ -235,11 +224,7 @@ bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
                 
                 int proximo_setor_necessario = -1;
 
-                //Caso especial: para o solicitante, o próximo setor necessário é o que vem DEPOIS do setor desejado.
                 if (aero->id == solicitante->id) {
-                    //O solicitante na simulação 'está' no setor_desejado.
-                    //O próximo passo dele seria o seguinte na rota.
-                    //Se o setor desejado for o último, ele conclui.
                      int idx_desejado = -1;
                      for(int r=0; r < aero->comprimento_rota; r++) {
                          if(aero->rota[r] == setor_desejado) {
@@ -249,14 +234,11 @@ bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
                      }
                      
                      if (idx_desejado == aero->comprimento_rota - 1) {
-                         proximo_setor_necessario = -1; //Vai sair do sistema
+                         proximo_setor_necessario = -1;
                      } else if (idx_desejado != -1) {
                          proximo_setor_necessario = aero->rota[idx_desejado + 1];
                      }
                 } else {
-                    //Para as outras aeronaves, o próximo setor é o que vem depois do setor atual delas.
-                    //Se a aeronave estiver no seu último setor, o loop não encontrará um próximo,
-                    //e proximo_setor_necessario continuará -1, indicando que ela pode sair.
                     for (int r = 0; r < aero->comprimento_rota - 1; r++) {
                         if (aero->rota[r] == aero->setor_atual) {
                             proximo_setor_necessario = aero->rota[r + 1];
@@ -265,20 +247,15 @@ bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
                     }
                 }
 
-                //Verifica se o recurso necessário está livre (ou se a aeronave vai sair)
                 bool pode_avancar = false;
                 
                 if (proximo_setor_necessario == -1) {
-                    //Vai sair do sistema (sucesso)
                     pode_avancar = true;
                 } else if (simulacao_setores[proximo_setor_necessario] == -1) {
-                    //Setor necessário está livre
                     pode_avancar = true;
                 }
 
-                //Se pode avançar, simulamos que ela libera seus recursos e termina
                 if (pode_avancar) {
-                    //Libera os recursos que ela segurava na simulação
                     for (int k = 0; k < total_setores; k++) {
                         if (simulacao_setores[k] == aero->id) {
                             simulacao_setores[k] = -1;
@@ -287,25 +264,22 @@ bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
                     
                     aeronave_concluiu[i] = true;
                     aeronaves_restantes--;
-                    progresso = true; //Conseguimos avançar, continuamos o loop
+                    progresso = true;
                 }
             }
         }
     }
 
-    //Limpeza e Resultado
     free(simulacao_setores);
     free(aeronave_concluiu);
 
-    //Se ainda restam aeronaves que não conseguiram concluir, temos um DEADLOCK.
     if (aeronaves_restantes > 0) {
-        return true; //Deadlock detectado
+        return true;
     } else {
-        return false; //Pode autorizar
+        return false;
     }
 }
 
-//Função imprimir estado dos setores
 void imprimir_estado_setores(){
     sem_wait(&mutex_console);
     printf("ESTADO DOS SETORES:\n");
@@ -320,20 +294,13 @@ void imprimir_estado_setores(){
     sem_post(&mutex_console);
 }
 
-//Thread que roda em paralelo so pra mostrar o status(Radar)
 void *controlador_central_executar(void *arg){
     while(simulacao_ativa){
         imprimir_estado_setores();
-        sleep(3);//Atualiza o radar a cada 3 segundos
-        //aq pode ter logica de deadlock
+        sleep(3);
     }
     return NULL;
 }
-
-//
-// void controlador_processar_solicitacao(){
-//     nao usado
-// }
 
 void liberar_setor_emergencia(aeronave_t *aeronave) {
     sem_wait(&mutex_ctrl);
@@ -353,7 +320,6 @@ void liberar_setor_emergencia(aeronave_t *aeronave) {
                aeronave->id, aeronave->prioridade, setor_encontrado);
         sem_post(&mutex_console);
         
-        // Chama a função interna (já estamos com mutex_ctrl)
         atc_liberar_setor_interno(aeronave, setor_encontrado);
     } else {
         sem_wait(&mutex_console);
@@ -366,10 +332,7 @@ void liberar_setor_emergencia(aeronave_t *aeronave) {
 }
 
 void imprimir_fila_espera(){
-    //Bloquear controlador para garantir que a fila nao seja modificada
     sem_wait(&mutex_ctrl);
-
-    //Bloquear console para impressao
     sem_wait(&mutex_console);
 
     int filas_vazias = 1;
@@ -377,7 +340,6 @@ void imprimir_fila_espera(){
     for(int i = 0; i < total_setores; i++){
         if(!fila_vazio(&fila_setores[i])){
             printf("Setor %02d: ", i);
-            //chamar funcao interna da fila para imprimir os nós
             fila_imprimir(&fila_setores[i]);
 
             filas_vazias = 0;
@@ -386,7 +348,7 @@ void imprimir_fila_espera(){
     if(filas_vazias){
         printf("Nenhuma aeronave aguardando em fila de espera\n");
     }
-    //Liberar os semaforos na ordem inversa
+    
     sem_post(&mutex_console);
     sem_post(&mutex_ctrl);
 
