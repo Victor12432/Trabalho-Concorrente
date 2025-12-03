@@ -12,8 +12,7 @@ void fila_inicializar(fila_prioridade_t *fila)
     fila->tamanho = 0;
 }
 
-void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave)
-{
+void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave) {
     if (!fila || !aeronave) return;
 
     no_fila_t *novo = malloc(sizeof(no_fila_t));
@@ -30,13 +29,14 @@ void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave)
     } else if (aeronave->prioridade > fila->inicio->aeronave->prioridade) {
         novo->proximo = fila->inicio;
         fila->inicio = novo;
-    } else if (aeronave->prioridade <= fila->fim->aeronave->prioridade) {
+    } else if (fila->fim != NULL && aeronave->prioridade <= fila->fim->aeronave->prioridade) {
         fila->fim->proximo = novo;
         fila->fim = novo;
     } else {
         no_fila_t *atual = fila->inicio;
+        // MUDANÇA AQUI: Trocar >= por >
         while (atual->proximo != NULL && 
-               atual->proximo->aeronave->prioridade >= aeronave->prioridade) {
+               atual->proximo->aeronave->prioridade > aeronave->prioridade) {
             atual = atual->proximo;
         }
         novo->proximo = atual->proximo;
