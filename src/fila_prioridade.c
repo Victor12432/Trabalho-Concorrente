@@ -5,9 +5,9 @@
 #include "../include/aeronave.h"
 
 /**
- * Inicializa uma fila de prioridade vazia
- * @param fila: Ponteiro para a fila a ser inicializada
- */
+ * Inicializa uma fila de prioridade com valores padrão
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+*/
 void fila_inicializar(fila_prioridade_t *fila)
 {
     if (!fila) return;
@@ -17,14 +17,11 @@ void fila_inicializar(fila_prioridade_t *fila)
 }
 
 /**
- * Insere uma aeronave na fila de prioridade de forma ordenada
- * Aeronaves com maior prioridade ficam no início da fila
- * Otimizado para verificar inserção no final rapidamente
- * @param fila: Ponteiro para a fila
+ * Insere uma aeronave na fila de prioridade mantendo a ordem por prioridade
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
  * @param aeronave: Ponteiro para a aeronave a ser inserida
  */
-void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave)
-{
+void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave) {
     if (!fila || !aeronave) return;
 
     no_fila_t *novo = malloc(sizeof(no_fila_t));
@@ -35,22 +32,18 @@ void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave)
     novo->aeronave = aeronave;
     novo->proximo = NULL;
 
-    /* Inserir ordenado por prioridade (maior prioridade primeiro) */
     if (fila->inicio == NULL) {
-        /* Fila vazia */
         fila->inicio = novo;
         fila->fim = novo;
     } else if (aeronave->prioridade > fila->inicio->aeronave->prioridade) {
-        /* Inserir no início (maior prioridade) - O(1) */
         novo->proximo = fila->inicio;
         fila->inicio = novo;
-    } else if (aeronave->prioridade <= fila->fim->aeronave->prioridade) {
-        /* Otimização: inserir no final se prioridade menor que o último - O(1) */
+    } else if (fila->fim != NULL && aeronave->prioridade <= fila->fim->aeronave->prioridade) {
         fila->fim->proximo = novo;
         fila->fim = novo;
     } else {
-        /* Procurar posição correta na fila - O(n) apenas quando necessário */
         no_fila_t *atual = fila->inicio;
+        // Percorre a fila até encontrar posição correta (maior prioridade primeiro)
         while (atual->proximo != NULL && 
                atual->proximo->aeronave->prioridade >= aeronave->prioridade) {
             atual = atual->proximo;
@@ -65,9 +58,9 @@ void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave)
 }
 
 /**
- * Remove e retorna a aeronave de maior prioridade da fila
- * @param fila: Ponteiro para a fila
- * @return Ponteiro para a aeronave removida, ou NULL se a fila estiver vazia
+ * Remove e retorna a aeronave com maior prioridade da fila
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ * @return Ponteiro para a aeronave removida ou NULL se a fila estiver vazia
  */
 aeronave_t *fila_remover(fila_prioridade_t *fila)
 {
@@ -87,8 +80,8 @@ aeronave_t *fila_remover(fila_prioridade_t *fila)
 }
 
 /**
- * Verifica se a fila está vazia
- * @param fila: Ponteiro para a fila
+ * Verifica se a fila de prioridade está vazia
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
  * @return true se a fila estiver vazia, false caso contrário
  */
 bool fila_vazio(fila_prioridade_t *fila)
@@ -97,9 +90,8 @@ bool fila_vazio(fila_prioridade_t *fila)
 }
 
 /**
- * Destroi a fila e libera toda a memória alocada
- * Nota: não libera as aeronaves, apenas os nós da fila
- * @param fila: Ponteiro para a fila a ser destruída
+ * Libera toda a memória alocada para a fila de prioridade
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
  */
 void fila_destruir(fila_prioridade_t *fila)
 {
@@ -117,8 +109,8 @@ void fila_destruir(fila_prioridade_t *fila)
 }
 
 /**
- * Imprime o conteúdo da fila de prioridade para debug
- * @param fila: Ponteiro para a fila a ser impressa
+ * Imprime o conteúdo da fila de prioridade no formato [A1(P:5), A2(P:3), ...]
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
  */
 void fila_imprimir(fila_prioridade_t *fila)
 {
@@ -138,9 +130,9 @@ void fila_imprimir(fila_prioridade_t *fila)
 }
 
 /**
- * Espia a aeronave de maior prioridade sem remover da fila
- * @param fila: Ponteiro para a fila
- * @return Ponteiro para a aeronave no início, ou NULL se vazia
+ * Retorna a aeronave com maior prioridade sem removê-la da fila
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ * @return Ponteiro para a aeronave no início da fila ou NULL se vazia
  */
 aeronave_t *fila_espiar(fila_prioridade_t *fila)
 {
@@ -150,8 +142,7 @@ aeronave_t *fila_espiar(fila_prioridade_t *fila)
 
 /**
  * Rotaciona a fila movendo o primeiro elemento para o final
- * Útil para algoritmos de prevenção de deadlock
- * @param fila: Ponteiro para a fila
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
  */
 void fila_rotacionar(fila_prioridade_t *fila)
 {
@@ -162,4 +153,43 @@ void fila_rotacionar(fila_prioridade_t *fila)
     primeiro->proximo = NULL;
     fila->fim->proximo = primeiro;
     fila->fim = primeiro;
+}
+
+/**
+ * Remove uma aeronave específica da fila de prioridade
+ * @param fila: Ponteiro para a estrutura da fila de prioridade
+ * @param aeronave: Ponteiro para a aeronave a ser removida
+ * @return true se a aeronave foi encontrada e removida, false caso contrário
+ */
+bool fila_remover_aeronave(fila_prioridade_t *fila, aeronave_t *aeronave)
+{
+    if (!fila || !aeronave || fila->inicio == NULL) return false;
+    
+    if (fila->inicio->aeronave->id == aeronave->id) {
+        no_fila_t *removido = fila->inicio;
+        fila->inicio = fila->inicio->proximo;
+        if (fila->inicio == NULL) {
+            fila->fim = NULL;
+        }
+        free(removido);
+        fila->tamanho--;
+        return true;
+    }
+    
+    no_fila_t *anterior = fila->inicio;
+    while (anterior->proximo != NULL) {
+        if (anterior->proximo->aeronave->id == aeronave->id) {
+            no_fila_t *removido = anterior->proximo;
+            anterior->proximo = removido->proximo;
+            if (removido == fila->fim) {
+                fila->fim = anterior;
+            }
+            free(removido);
+            fila->tamanho--;
+            return true;
+        }
+        anterior = anterior->proximo;
+    }
+    
+    return false;
 }
