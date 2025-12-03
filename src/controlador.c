@@ -68,12 +68,17 @@ int atc_solicitar_setor(aeronave_t *aeronave, int setor_destino){
     //A aeronave espera se o setor já tem alguém (e não é ela mesma)
     bool setor_ocupado = (setores_ocupados[setor_destino] != -1 && 
                           setores_ocupados[setor_destino] != aeronave->id);
-
-    if (setor_ocupado) {
+    bool vai_travar = verificar_deadlock(aeronave, setor_destino);
+    if (setor_ocupado || vai_travar) {
         sem_wait(&mutex_console);
         imprimir_timestamp();
-        printf("Aeronave %d (P:%d) aguardando setor %d (OCUPADO por %d)\n", 
-               aeronave->id, aeronave->prioridade, setor_destino, setores_ocupados[setor_destino]);
+        if (setor_ocupado) {
+            printf("Aeronave %d (P:%d) aguardando setor %d (OCUPADO por %d)\n", 
+                   aeronave->id, aeronave->prioridade, setor_destino, setores_ocupados[setor_destino]);
+        } else {
+            printf("Aeronave %d (P:%d) aguardando setor %d (BLOQUEIO PREVENTIVO DE DEADLOCK)\n", 
+                   aeronave->id, aeronave->prioridade, setor_destino);
+        }
         sem_post(&mutex_console);
 
         fila_inserir(&fila_setores[setor_destino], aeronave);
@@ -191,6 +196,10 @@ bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
 
     // Identifica quais aeronaves estão voando (ativas) para simular apenas elas
     for (int i = 0; i < total_aeronaves; i++) {
+         if (aeronaves[i] == NULL) {
+            aeronave_concluiu[i] = true;  // Ignora
+            continue;
+        }
         //Se a aeronave já terminou ou nem começou, marcamos como concluída para ignorar
         //Ajuste essa lógica conforme sua implementação de status da aeronave)
         //Aqui assumimos: se ela está em um setor ou é a solicitante, ela conta.
@@ -293,10 +302,29 @@ void imprimir_estado_setores(){
     }
     sem_post(&mutex_console);
 }
+void controlador_processar_solicitacoes() {
+    sem_wait(&mutex_ctrl);
+    
+    // Verifica deadlocks em todas as filas
+    for (int setor = 0; setor < total_setores; setor++) {
+        if (!fila_vazio(&fila_setores[setor])) {
+            aeronave_t *proxima = fila_espiar(&fila_setores[setor]);
+            if (!verificar_deadlock(proxima, setor)) {
+                // Pode conceder setor com segurança
+                aeronave_t *concedida = fila_remover(&fila_setores[setor]);
+                setores_ocupados[setor] = concedida->id;
+                sem_post(&concedida->sem_aeronave);
+            }
+        }
+    }
+    
+    sem_post(&mutex_ctrl);
+}
 
 void *controlador_central_executar(void *arg){
     while(simulacao_ativa){
         imprimir_estado_setores();
+        controlador_processar_solicitacoes();
         sleep(3);
     }
     return NULL;
