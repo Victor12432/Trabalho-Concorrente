@@ -86,10 +86,17 @@ double aeronave_calcular_media_espera(aeronave_t *aeronave) {
     if (aeronave == NULL || aeronave->total_espera == 0) return 0.0;
     
     double soma = 0.0;
+    int contagem_valida = 0;
+    
     for (int i = 0; i < aeronave->total_espera; i++) {
-        soma += aeronave->tempo_espera[i];
+        // Ignora tempos zerados (provavelmente cálculo errado)
+        if (aeronave->tempo_espera[i] > 0) {
+            soma += aeronave->tempo_espera[i];
+            contagem_valida++;
+        }
     }
-    return soma / aeronave->total_espera;
+    
+    return (contagem_valida > 0) ? (soma / contagem_valida) : 0.0;
 }
 
 void *aeronave_executa(void *arg) {
@@ -115,7 +122,7 @@ void *aeronave_executa(void *arg) {
             continue;
         }
         
-        time_t inicio_espera = time(NULL);
+        time_t inicio = time(NULL);
         
         // Solicita acesso ao próximo setor
         int sucesso = atc_solicitar_setor(a, setor_destino);
@@ -127,7 +134,7 @@ void *aeronave_executa(void *arg) {
             break;
         }
         
-        aeronave_registro_tempo_espera(a, inicio_espera);
+        aeronave_registro_tempo_espera(a, inicio);
         
         // Libera setor anterior (se houver)
         if (a->setor_atual >= 0) {
