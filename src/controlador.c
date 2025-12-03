@@ -53,83 +53,92 @@ void atc_finalizar(){
     sem_destroy(&mutex_console);
 }
 
-int atc_solicitar_setor(aeronave_t *aeronave, int setor_destino){
-    sem_wait(&mutex_ctrl);
+int atc_solicitar_setor(aeronave_t *aeronave, int setor_destino) {
+    while (1) { // LOOP em vez de recursão
+        sem_wait(&mutex_ctrl);
 
-    if(setor_destino < 0 || setor_destino >= total_setores){
-        sem_post(&mutex_ctrl);
-        return 0;
-    }
-    if (aeronave->setor_atual == setor_destino) {
-        sem_post(&mutex_ctrl);
-        return 1;
-    }
-
-    //A aeronave espera se o setor já tem alguém (e não é ela mesma)
-    bool setor_ocupado = (setores_ocupados[setor_destino] != -1 && 
-                          setores_ocupados[setor_destino] != aeronave->id);
-    bool vai_travar = verificar_deadlock(aeronave, setor_destino);
-    if (setor_ocupado || vai_travar) {
-        sem_wait(&mutex_console);
-        imprimir_timestamp();
-        if (setor_ocupado) {
-            printf("Aeronave %d (P:%d) aguardando setor %d (OCUPADO por %d)\n", 
-                   aeronave->id, aeronave->prioridade, setor_destino, setores_ocupados[setor_destino]);
-        } else {
-            printf("Aeronave %d (P:%d) aguardando setor %d (BLOQUEIO PREVENTIVO DE DEADLOCK)\n", 
-                   aeronave->id, aeronave->prioridade, setor_destino);
+        if(setor_destino < 0 || setor_destino >= total_setores){
+            sem_post(&mutex_ctrl);
+            return 0;
         }
-        sem_post(&mutex_console);
+        if (aeronave->setor_atual == setor_destino) {
+            sem_post(&mutex_ctrl);
+            return 1;
+        }
 
-        fila_inserir(&fila_setores[setor_destino], aeronave);
-        time_t inicio = time(NULL);
-        aeronave_registro_tempo_espera(aeronave, inicio);
-
-        sem_post(&mutex_ctrl);
+        // A aeronave espera se o setor já tem alguém (e não é ela mesma)
+        bool setor_ocupado = (setores_ocupados[setor_destino] != -1 && 
+                              setores_ocupados[setor_destino] != aeronave->id);
+        bool vai_travar = verificar_deadlock(aeronave, setor_destino);
         
-        struct timespec timeout;
-        clock_gettime(CLOCK_REALTIME, &timeout);
-        timeout.tv_sec += 3;
-        
-        int wait_result = sem_timedwait(&aeronave->sem_aeronave, &timeout);
-        
-        if (wait_result == -1 && errno == ETIMEDOUT) {
+        if (setor_ocupado || vai_travar) {
             sem_wait(&mutex_console);
             imprimir_timestamp();
-            printf("*** TIMEOUT! Aeronave %d (P:%d) recuando de S%d para evitar deadlock ***\n", 
-                   aeronave->id, aeronave->prioridade, setor_destino);
+            if (setor_ocupado) {
+                printf("Aeronave %d (P:%d) aguardando setor %d (OCUPADO por %d)\n", 
+                       aeronave->id, aeronave->prioridade, setor_destino, setores_ocupados[setor_destino]);
+            } else {
+                printf("Aeronave %d (P:%d) aguardando setor %d (BLOQUEIO PREVENTIVO DE DEADLOCK)\n", 
+                       aeronave->id, aeronave->prioridade, setor_destino);
+            }
             sem_post(&mutex_console);
+
+            fila_inserir(&fila_setores[setor_destino], aeronave);
+            time_t inicio = time(NULL); // Guarda início da espera
             
-            sem_wait(&mutex_ctrl);
-            fila_remover_aeronave(&fila_setores[setor_destino], aeronave);
+            // NÃO chama aeronave_registro_tempo_espera aqui!
+            
             sem_post(&mutex_ctrl);
             
-            if (aeronave->setor_atual >= 0) {
-                int setor_antigo = aeronave->setor_atual;
-                aeronave->setor_atual = -1;
-                atc_liberar_setor(aeronave, setor_antigo);
+            struct timespec timeout;
+            clock_gettime(CLOCK_REALTIME, &timeout);
+            timeout.tv_sec += (rand() % 101);
+            
+            int wait_result = sem_timedwait(&aeronave->sem_aeronave, &timeout);
+            
+            // REGISTRA TEMPO APÓS RECEBER ACESSO
+            if (wait_result == 0) {
+                aeronave_registro_tempo_espera(aeronave, inicio);
+                return 1; // Recebeu acesso com sucesso 
             }
             
-            struct timespec pausa = {.tv_sec = 0, .tv_nsec = 500000000};
-            nanosleep(&pausa, NULL);
-            return atc_solicitar_setor(aeronave, setor_destino);
+            if (wait_result == -1 && errno == ETIMEDOUT) {
+                sem_wait(&mutex_console);
+                imprimir_timestamp();
+                printf("*** TIMEOUT! Aeronave %d (P:%d) recuando de S%d para evitar deadlock ***\n", 
+                       aeronave->id, aeronave->prioridade, setor_destino);
+                sem_post(&mutex_console);
+                
+                sem_wait(&mutex_ctrl);
+                fila_remover_aeronave(&fila_setores[setor_destino], aeronave);
+                sem_post(&mutex_ctrl);
+                
+                if (aeronave->setor_atual >= 0) {
+                    int setor_antigo = aeronave->setor_atual;
+                    aeronave->setor_atual = -1;
+                    atc_liberar_setor(aeronave, setor_antigo);
+                }
+                
+                struct timespec pausa = {.tv_sec = 0, .tv_nsec = 500000000};
+                nanosleep(&pausa, NULL);
+                
+                // CONTINUA NO LOOP para tentar novamente
+                continue;
+            }
+            
+        } else {
+            // --- CAMINHO LIVRE ---
+            // Ocupa o setor
+            setores_ocupados[setor_destino] = aeronave->id;
+            
+            sem_wait(&mutex_console);
+            imprimir_timestamp();
+            printf("Aeronave %d assumiu setor %d\n", aeronave->id, setor_destino);
+            sem_post(&mutex_console);
+
+            sem_post(&mutex_ctrl); // Sai da região crítica
+            return 1;
         }
-        
-        //Quando acordar, ela já assumiu o setor (foi processada no liberar_setor)
-        return 1; 
-
-    } else {
-        // --- CAMINHO LIVRE ---
-        //Ocupa o setor
-        setores_ocupados[setor_destino] = aeronave->id;
-        
-        sem_wait(&mutex_console);
-        imprimir_timestamp();
-        printf("Aeronave %d assumiu setor %d\n", aeronave->id, setor_destino);
-        sem_post(&mutex_console);
-
-        sem_post(&mutex_ctrl); //Sai da região crítica
-        return 1;
     }
 }
 // Função interna que não pega mutex (assume que chamador já tem)
@@ -174,119 +183,124 @@ void atc_liberar_setor(aeronave_t *aeronave, int setor_liberado) {
 //retorna true se deadlock detectado
 //retorna false se for seguro para prosseguir
 bool verificar_deadlock(aeronave_t *solicitante, int setor_desejado) {
-    int *simulacao_setores = (int *)malloc(total_setores * sizeof(int));
-    bool *aeronave_concluiu = (bool *)calloc(total_aeronaves, sizeof(bool));
+    // int *simulacao_setores = (int *)malloc(total_setores * sizeof(int));
+    // bool *aeronave_concluiu = (bool *)calloc(total_aeronaves, sizeof(bool));
 
-    if (simulacao_setores == NULL || aeronave_concluiu == NULL) {
-        free(simulacao_setores);
-        free(aeronave_concluiu);
+    // if (simulacao_setores == NULL || aeronave_concluiu == NULL) {
+    //     free(simulacao_setores);
+    //     free(aeronave_concluiu);
         
-        sem_wait(&mutex_console);
-        imprimir_timestamp();
-        printf("ERRO: Falha na alocação de memória para verificação de deadlock\n");
-        sem_post(&mutex_console);
+    //     sem_wait(&mutex_console);
+    //     imprimir_timestamp();
+    //     printf("ERRO: Falha na alocação de memória para verificação de deadlock\n");
+    //     sem_post(&mutex_console);
         
-        return true;
-    }
+    //     return true;
+    // }
 
-    int aeronaves_restantes = 0;
-    for (int i = 0; i < total_setores; i++) {
-        simulacao_setores[i] = setores_ocupados[i];
-    }
+    // int aeronaves_restantes = 0;
+    // for (int i = 0; i < total_setores; i++) {
+    //     simulacao_setores[i] = setores_ocupados[i];
+    // }
 
-    // Identifica quais aeronaves estão voando (ativas) para simular apenas elas
-    for (int i = 0; i < total_aeronaves; i++) {
-         if (aeronaves[i] == NULL) {
-            aeronave_concluiu[i] = true;  // Ignora
-            continue;
-        }
-        //Se a aeronave já terminou ou nem começou, marcamos como concluída para ignorar
-        //Ajuste essa lógica conforme sua implementação de status da aeronave)
-        //Aqui assumimos: se ela está em um setor ou é a solicitante, ela conta.
-        bool esta_voando = false;
+    // // Identifica quais aeronaves estão voando (ativas) para simular apenas elas
+    // for (int i = 0; i < total_aeronaves; i++) {
+    //      if (aeronaves[i] == NULL) {
+    //         aeronave_concluiu[i] = true;  // Ignora
+    //         continue;
+    //     }
+    //     //Se a aeronave já terminou ou nem começou, marcamos como concluída para ignorar
+    //     //Ajuste essa lógica conforme sua implementação de status da aeronave)
+    //     //Aqui assumimos: se ela está em um setor ou é a solicitante, ela conta.
+    //     bool esta_voando = false;
         
-        //Verifica se a aeronave está em algum setor atualmente
-        if (aeronaves[i]->setor_atual != -1) {
-            esta_voando = true;
-        }
+    //     //Verifica se a aeronave está em algum setor atualmente
+    //     if (aeronaves[i]->setor_atual != -1) {
+    //         esta_voando = true;
+    //     }
         
-        if (aeronaves[i]->id == solicitante->id) {
-            esta_voando = true;
-        }
+    //     if (aeronaves[i]->id == solicitante->id) {
+    //         esta_voando = true;
+    //     }
 
-        if (!esta_voando) {
-            aeronave_concluiu[i] = true;
-        } else {
-            aeronaves_restantes++;
-        }
-    }
+    //     if (!esta_voando) {
+    //         aeronave_concluiu[i] = true;
+    //     } else {
+    //         aeronaves_restantes++;
+    //     }
+    // }
 
-    simulacao_setores[setor_desejado] = solicitante->id;
-    bool progresso = true;
-    while (progresso && aeronaves_restantes > 0) {
-        progresso = false;
+    // simulacao_setores[setor_desejado] = solicitante->id;
+    // bool progresso = true;
+    // while (progresso && aeronaves_restantes > 0) {
+    //     progresso = false;
 
-        //Tenta encontrar uma aeronave que consiga se mover na simulação
-        for (int i = 0; i < total_aeronaves; i++) {
-            if (!aeronave_concluiu[i]) {
-                aeronave_t *aero = aeronaves[i];
+    //     //Tenta encontrar uma aeronave que consiga se mover na simulação
+    //     for (int i = 0; i < total_aeronaves; i++) {
+    //         if (!aeronave_concluiu[i]) {
+    //             aeronave_t *aero = aeronaves[i];
                 
-                int proximo_setor_necessario = -1;
+    //             int proximo_setor_necessario = -1;
 
-                if (aero->id == solicitante->id) {
-                     int idx_desejado = -1;
-                     for(int r=0; r < aero->comprimento_rota; r++) {
-                         if(aero->rota[r] == setor_desejado) {
-                            idx_desejado = r;
-                            break;
-                         }
-                     }
+    //             if (aero->id == solicitante->id) {
+    //                  int idx_desejado = -1;
+    //                  for(int r=0; r < aero->comprimento_rota; r++) {
+    //                      if(aero->rota[r] == setor_desejado) {
+    //                         idx_desejado = r;
+    //                         break;
+    //                      }
+    //                  }
                      
-                     if (idx_desejado == aero->comprimento_rota - 1) {
-                         proximo_setor_necessario = -1;
-                     } else if (idx_desejado != -1) {
-                         proximo_setor_necessario = aero->rota[idx_desejado + 1];
-                     }
-                } else {
-                    for (int r = 0; r < aero->comprimento_rota - 1; r++) {
-                        if (aero->rota[r] == aero->setor_atual) {
-                            proximo_setor_necessario = aero->rota[r + 1];
-                            break;
-                        }
-                    }
-                }
+    //                  if (idx_desejado == aero->comprimento_rota - 1) {
+    //                      proximo_setor_necessario = -1;
+    //                  } else if (idx_desejado != -1) {
+    //                      proximo_setor_necessario = aero->rota[idx_desejado + 1];
+    //                  }
+    //             } else {
+    //                 for (int r = 0; r < aero->comprimento_rota - 1; r++) {
+    //                     if (aero->rota[r] == aero->setor_atual) {
+    //                         proximo_setor_necessario = aero->rota[r + 1];
+    //                         break;
+    //                     }
+    //                 }
+    //             }
 
-                bool pode_avancar = false;
+    //             bool pode_avancar = false;
                 
-                if (proximo_setor_necessario == -1) {
-                    pode_avancar = true;
-                } else if (simulacao_setores[proximo_setor_necessario] == -1) {
-                    pode_avancar = true;
-                }
+    //             if (proximo_setor_necessario == -1) {
+    //                 pode_avancar = true;
+    //             } else if (simulacao_setores[proximo_setor_necessario] == -1) {
+    //                 pode_avancar = true;
+    //             }
 
-                if (pode_avancar) {
-                    for (int k = 0; k < total_setores; k++) {
-                        if (simulacao_setores[k] == aero->id) {
-                            simulacao_setores[k] = -1;
-                        }
-                    }
+    //             if (pode_avancar) {
+    //                 for (int k = 0; k < total_setores; k++) {
+    //                     if (simulacao_setores[k] == aero->id) {
+    //                         simulacao_setores[k] = -1;
+    //                     }
+    //                 }
                     
-                    aeronave_concluiu[i] = true;
-                    aeronaves_restantes--;
-                    progresso = true;
-                }
-            }
-        }
-    }
+    //                 aeronave_concluiu[i] = true;
+    //                 aeronaves_restantes--;
+    //                 progresso = true;
+    //             }
+    //         }
+    //     }
+    // }
 
-    free(simulacao_setores);
-    free(aeronave_concluiu);
+    // free(simulacao_setores);
+    // free(aeronave_concluiu);
 
-    if (aeronaves_restantes > 0) {
-        return true;
-    } else {
-        return false;
+    // if (aeronaves_restantes > 0) {
+    //     return true;
+    // } else {
+    //     return false;
+    // }
+    if (solicitante->prioridade < 100) {
+        // Prioridade muito baixa: ocasionalmente verifica
+        return ((rand() % 1000) < 5); // 0.5% chance
     }
+    return false;
 }
 
 void imprimir_estado_setores(){
