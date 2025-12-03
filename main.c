@@ -118,8 +118,14 @@ int main(int argc, char *argv[]) {
     
     printf("Setores configurados: %d\n", num_setores);
     printf("Aeronaves simuladas: %d\n", num_aeronaves);
-    printf("Todas as aeronaves completaram suas rotas!\n");
+    printf("Razão de contenção: %.2f aeronaves/setor\n", (float)num_aeronaves/num_setores);
+    printf("\nTodas as aeronaves completaram suas rotas!\n");
     printf("Sistema finalizado com sucesso.\n");
+    printf("\nTécnicas de Concorrência Utilizadas:\n");
+    printf("  • Semáforos (POSIX) para sincronização\n");
+    printf("  • Detecção de deadlock por grafo de espera\n");
+    printf("  • Resolução por prioridade com boost anti-starvation\n");
+    printf("  • Fila de prioridade para escalonamento justo\n");
     printf("===============================================\n");
     
     atc_finalizar();

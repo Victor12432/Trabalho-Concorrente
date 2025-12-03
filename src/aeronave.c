@@ -20,14 +20,19 @@ aeronave_t *aeronave_criar(int id, int total_setores) {
     a->prioridade = 1 + (rand() % 1000);
     a->setor_atual = -1;
     a->setor_destino = -1;
-    a->tempo_solicitacao = 0;
+    a->tempo_solicitacao.tv_sec = 0;
+    a->tempo_solicitacao.tv_nsec = 0;
     a->tempo_entrada = time(NULL);
     a->total_espera = 0;
+    a->precisa_recuar = false;
+    a->prioridade_original = a->prioridade;
+    a->contador_recuos = 0;
+    a->contador_esperas_longas = 0;
     if (total_setores < 2) total_setores = 2;
     a->comprimento_rota = 2 + (rand() % (total_setores - 1));
     
     a->rota = malloc(a->comprimento_rota * sizeof(int));
-    a->tempo_espera = malloc(a->comprimento_rota * sizeof(time_t));
+    a->tempo_espera = malloc(a->comprimento_rota * sizeof(double));
     
     if (a->rota == NULL || a->tempo_espera == NULL) {
         free(a->rota);
@@ -36,7 +41,7 @@ aeronave_t *aeronave_criar(int id, int total_setores) {
         return NULL;
     }
     
-    memset(a->tempo_espera, 0, a->comprimento_rota * sizeof(time_t));
+    memset(a->tempo_espera, 0, a->comprimento_rota * sizeof(double));
     
     for (int i = 0; i < a->comprimento_rota; i++) {
         a->rota[i] = rand() % total_setores;
@@ -72,12 +77,16 @@ void aeronave_imprimir_status(aeronave_t *aeronave) {
     sem_post(&mutex_console);
 }
 
-void aeronave_registro_tempo_espera(aeronave_t *aeronave, time_t inicio) {
-    if (aeronave == NULL || inicio == 0) return;
+void aeronave_registro_tempo_espera(aeronave_t *aeronave, struct timespec inicio) {
+    if (aeronave == NULL || (inicio.tv_sec == 0 && inicio.tv_nsec == 0)) return;
     
-    time_t fim = time(NULL);
+    struct timespec fim;
+    clock_gettime(CLOCK_REALTIME, &fim);
+    
     if (aeronave->total_espera < aeronave->comprimento_rota) {
-        aeronave->tempo_espera[aeronave->total_espera] = fim - inicio;
+        double tempo_decorrido = (fim.tv_sec - inicio.tv_sec) + 
+                                  (fim.tv_nsec - inicio.tv_nsec) / 1000000000.0;
+        aeronave->tempo_espera[aeronave->total_espera] = tempo_decorrido;
         aeronave->total_espera++;
     }
 }
@@ -89,8 +98,8 @@ double aeronave_calcular_media_espera(aeronave_t *aeronave) {
     int contagem_valida = 0;
     
     for (int i = 0; i < aeronave->total_espera; i++) {
-        // Ignora tempos zerados (provavelmente cálculo errado)
-        if (aeronave->tempo_espera[i] > 0) {
+        // Ignora tempos zerados ou negativos
+        if (aeronave->tempo_espera[i] > 0.001) {
             soma += aeronave->tempo_espera[i];
             contagem_valida++;
         }
@@ -122,8 +131,6 @@ void *aeronave_executa(void *arg) {
             continue;
         }
         
-        time_t inicio = time(NULL);
-        
         // Solicita acesso ao próximo setor
         int sucesso = atc_solicitar_setor(a, setor_destino);
         if (!sucesso) {
@@ -133,8 +140,6 @@ void *aeronave_executa(void *arg) {
             sem_post(&mutex_console);
             break;
         }
-        
-        aeronave_registro_tempo_espera(a, inicio);
         
         // Libera setor anterior (se houver)
         if (a->setor_atual >= 0) {

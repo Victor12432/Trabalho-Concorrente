@@ -34,9 +34,9 @@ void fila_inserir(fila_prioridade_t *fila, aeronave_t *aeronave) {
         fila->fim = novo;
     } else {
         no_fila_t *atual = fila->inicio;
-        // MUDANÇA AQUI: Trocar >= por >
+        // Percorre a fila até encontrar posição correta (maior prioridade primeiro)
         while (atual->proximo != NULL && 
-               atual->proximo->aeronave->prioridade > aeronave->prioridade) {
+               atual->proximo->aeronave->prioridade >= aeronave->prioridade) {
             atual = atual->proximo;
         }
         novo->proximo = atual->proximo;

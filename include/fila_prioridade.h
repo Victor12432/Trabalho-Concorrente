@@ -24,5 +24,6 @@ bool fila_vazio(fila_prioridade_t *fila);
 void fila_destruir(fila_prioridade_t *fila);
 void fila_imprimir(fila_prioridade_t *fila);
 void fila_rotacionar(fila_prioridade_t *fila);
+bool fila_remover_aeronave(fila_prioridade_t *fila, aeronave_t *aeronave);
 
 #endif // FILA_PRIORIDADE_H
